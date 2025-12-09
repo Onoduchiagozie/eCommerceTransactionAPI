@@ -1,12 +1,29 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using eCommerceTransactionAPI.Application.Interface;
+using Microsoft.AspNetCore.Mvc;
+using WebApplication1.Service.DTOs;
 
-namespace eCommerceTransactionAPI.Controllers;
-
-public class OrderController : Controller
+[ApiController]
+[Route("api/[controller]")]
+public class OrderController : ControllerBase
 {
-    // GET
-    public IActionResult Index()
+    private readonly IOrderService _service;
+
+    public OrderController(IOrderService service)
     {
-        return View();
+        _service = service;
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> PlaceOrder(PlaceOrderRequest request)
+    {
+        try
+        {
+            var orderId = await _service.PlaceOrderAsync(request);
+            return Ok(new { orderId });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }
