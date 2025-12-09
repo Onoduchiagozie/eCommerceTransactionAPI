@@ -1,6 +1,8 @@
-﻿using eCommerceTransactionAPI.Application.Interface;
-using Microsoft.AspNetCore.Mvc;
-using WebApplication1.Service.DTOs;
+﻿ using eCommerceTransactionAPI.Application.Interface;
+ using Microsoft.AspNetCore.Mvc;
+ using WebApplication1.Service.DTOs;
+
+ namespace eCommerceTransactionAPI.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -14,12 +16,18 @@ public class OrderController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> PlaceOrder(PlaceOrderRequest request)
+    public async Task<IActionResult> PlaceOrder(
+        [FromBody] PlaceOrderRequest request)
     {
         try
         {
             var orderId = await _service.PlaceOrderAsync(request);
-            return Ok(new { orderId });
+
+            return Ok(new
+            {
+                message = "Order placed successfully",
+                orderId
+            });
         }
         catch (Exception ex)
         {

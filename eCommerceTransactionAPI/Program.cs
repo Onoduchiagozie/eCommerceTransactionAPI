@@ -1,4 +1,4 @@
-using DAL.Services;
+using eCommerceTransactionAPI.DAL.Services;
 using eCommerceTransactionAPI.Application.Interface;
 using eCommerceTransactionAPI.DAL.Data;
 using Microsoft.EntityFrameworkCore;

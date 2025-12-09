@@ -1,13 +1,14 @@
 ﻿ 
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using eCommerceTransactionAPI.Application.Interface;
 using eCommerceTransactionAPI.DAL.Data;
 using eCommerceTransactionAPI.Domain.Models;
-using Microsoft.Data.SqlClient;
 using WebApplication1.Service.DTOs;
 
-namespace DAL.Services;
+
+namespace eCommerceTransactionAPI.DAL.Services;
 
 public class OrderService : IOrderService
 {
@@ -20,8 +21,12 @@ public class OrderService : IOrderService
 
     public async Task<int> PlaceOrderAsync(PlaceOrderRequest request)
     {
-        using var transaction = await _context.Database
-            .BeginTransactionAsync(IsolationLevel.Serializable);
+        var start = DateTime.UtcNow;
+        Console.WriteLine($"[{start:HH:mm:ss.fff}] Order started");
+
+        using var transaction =
+            await _context.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable);
 
         try
         {
@@ -29,19 +34,27 @@ public class OrderService : IOrderService
 
             foreach (var item in request.Items)
             {
+                // ✅ ROW + UPDATE LOCK
                 var product = await _context.Products
                     .FromSqlRaw(
-                        @"SELECT * FROM Products 
+                        @"SELECT * FROM Products
                           WITH (UPDLOCK, ROWLOCK)
                           WHERE Id = @id",
                         new SqlParameter("@id", item.ProductId))
                     .FirstOrDefaultAsync();
 
+                Console.WriteLine(
+                    $"[{DateTime.UtcNow:HH:mm:ss.fff}] Product locked");
+
+ 
+
                 if (product == null)
-                    throw new Exception("Product not found");
+                    throw new Exception($"Product not found (ID: {item.ProductId})");
 
                 if (product.Quantity < item.Quantity)
-                    throw new Exception("Insufficient stock");
+                    throw new Exception(
+                        $"Insufficient stock for '{product.Name}'. " +
+                        $"Available: {product.Quantity}, Requested: {item.Quantity}");
 
                 product.Quantity -= item.Quantity;
 
@@ -56,6 +69,9 @@ public class OrderService : IOrderService
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
+            Console.WriteLine(
+                $"[{DateTime.UtcNow:HH:mm:ss.fff}] Order committed");
+
             return order.Id;
         }
         catch
@@ -64,4 +80,6 @@ public class OrderService : IOrderService
             throw;
         }
     }
+    
+    
 }
