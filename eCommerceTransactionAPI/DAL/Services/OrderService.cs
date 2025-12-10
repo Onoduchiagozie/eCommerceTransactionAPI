@@ -1,5 +1,4 @@
-﻿ 
-using Microsoft.Data.SqlClient;
+﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using eCommerceTransactionAPI.Application.Interface;
@@ -19,67 +18,73 @@ public class OrderService : IOrderService
         _context = context;
     }
 
-    public async Task<int> PlaceOrderAsync(PlaceOrderRequest request)
+    public async Task<PlaceOrderResult> PlaceOrderAsync(PlaceOrderRequest request)
     {
-        var start = DateTime.UtcNow;
-        Console.WriteLine($"[{start:HH:mm:ss.fff}] Order started");
+        using var transaction = await _context.Database
+            .BeginTransactionAsync(IsolationLevel.Serializable);
 
-        using var transaction =
-            await _context.Database.BeginTransactionAsync(
-                IsolationLevel.Serializable);
+        var result = new PlaceOrderResult();
+        var order = new Order();
 
-        try
+        foreach (var item in request.Items)
         {
-            var order = new Order();
+            var product = await _context.Products
+                .FromSqlRaw(
+                    @"SELECT * FROM Products WITH (UPDLOCK, ROWLOCK)
+                  WHERE Id = @id",
+                    new SqlParameter("@id", item.ProductId))
+                .FirstOrDefaultAsync();
 
-            foreach (var item in request.Items)
+            if (product == null)
             {
-                // ✅ ROW + UPDATE LOCK
-                var product = await _context.Products
-                    .FromSqlRaw(
-                        @"SELECT * FROM Products
-                          WITH (UPDLOCK, ROWLOCK)
-                          WHERE Id = @id",
-                        new SqlParameter("@id", item.ProductId))
-                    .FirstOrDefaultAsync();
-
-                Console.WriteLine(
-                    $"[{DateTime.UtcNow:HH:mm:ss.fff}] Product locked");
-
- 
-
-                if (product == null)
-                    throw new Exception($"Product not found (ID: {item.ProductId})");
-
-                if (product.Quantity < item.Quantity)
-                    throw new Exception(
-                        $"Insufficient stock for '{product.Name}'. " +
-                        $"Available: {product.Quantity}, Requested: {item.Quantity}");
-
-                product.Quantity -= item.Quantity;
-
-                order.Items.Add(new OrderItem
+                result.Failed.Add(new FailedItem
                 {
-                    ProductId = product.Id,
-                    Quantity = item.Quantity
+                    ProductId = item.ProductId,
+                    Reason = "Product not found"
                 });
+                continue;
             }
 
+            if (product.Quantity < item.Quantity)
+            {
+                result.Failed.Add(new FailedItem
+                {
+                    ProductId = product.Id,
+                    Reason = "Insufficient stock",
+                    Available = product.Quantity,
+                    Requested = item.Quantity
+                });
+                continue;
+            }
+
+            product.Quantity -= item.Quantity;
+
+            order.Items.Add(new OrderItem
+            {
+                ProductId = product.Id,
+                Quantity = item.Quantity
+            });
+
+            result.Fulfilled.Add(new FulfilledItem
+            {
+                ProductId = product.Id,
+                ProductName = product.Name,
+                Quantity = item.Quantity
+            });
+        }
+
+        if (result.Fulfilled.Any())
+        {
             _context.Orders.Add(order);
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
-
-            Console.WriteLine(
-                $"[{DateTime.UtcNow:HH:mm:ss.fff}] Order committed");
-
-            return order.Id;
         }
-        catch
+        else
         {
             await transaction.RollbackAsync();
-            throw;
         }
+
+        return result;
     }
-    
-    
+
 }

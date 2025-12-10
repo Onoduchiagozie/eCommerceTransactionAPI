@@ -1,91 +1,45 @@
-﻿using eCommerceTransactionAPI.DAL.Data;
+﻿using eCommerceTransactionAPI.Application.Interface;
 using eCommerceTransactionAPI.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
- 
-namespace eCommerceTransactionAPI.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 public class ProductController : ControllerBase
 {
-    private readonly CommerceDbContext _context;
+    private readonly IProductService _service;
 
-    public ProductController(CommerceDbContext context)
+    public ProductController(IProductService service)
     {
-        _context = context;
+        _service = service;
     }
 
     [HttpGet]
-    public async Task<ActionResult> GetProducts()
-    {
-        var allProducts = await _context.Products.ToListAsync();
-        return Ok(allProducts);
-    }
+    public async Task<IActionResult> GetAll()
+        => Ok(await _service.GetAllAsync());
 
-
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] Product product)
-    {
-        try
-        {
-            _context.Products.Add(product);
-            await _context.SaveChangesAsync();
-        }
-        catch(Exception e)
-        {
-            Console.WriteLine(e.Message);
-        }
-        return Ok(product);
-    }
-
- 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var product = await _context.Products.FindAsync(id);
+        var product = await _service.GetByIdAsync(id);
         if (product == null) return NotFound();
         return Ok(product);
     }
 
- 
+    [HttpPost]
+    public async Task<IActionResult> Create(Product product)
+        => Ok(await _service.CreateAsync(product));
+
     [HttpPut("{id:int}")]
-    public async Task<IActionResult> Update(int id, [FromBody] Product updated)
+    public async Task<IActionResult> Update(int id, Product product)
     {
-
-        var existingProduct = await _context.Products.FindAsync(id);
-        if (existingProduct == null) return NotFound();
-
-        if (updated.Name != null) existingProduct.Name = updated.Name;
-        if (updated.Description != null) existingProduct.Description = updated.Description;
-        if (updated.Quantity.HasValue) existingProduct.Quantity = updated.Quantity.Value;
-        if (updated.Price.HasValue) existingProduct.Price = updated.Price.Value;
-
-
-        try
-        {
-            // 4. Save changes
-            await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return StatusCode(409, "Concurrency conflict occurred. Try again.");
-        }
-
-        // 5. Return 204 No Content (standard for PUT)
+        await _service.UpdateAsync(id, product);
         return NoContent();
     }
- 
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var product = await _context.Products.FindAsync(id);
-        if (product == null) return NotFound();
-
-        _context.Products.Remove(product);
-        await _context.SaveChangesAsync();
-
+        await _service.DeleteAsync(id);
         return NoContent();
     }
-
 }
